@@ -1,11 +1,13 @@
 import logging
 import os
 
-from flask import Flask, request
+from flask import Flask, request, Response
+from flask.helpers import make_response
 from flask_basicauth import BasicAuth
 from apscheduler.schedulers.background import BackgroundScheduler
-import requests as r
+import requests as req
 import boto3
+import urllib.parse
 
 
 # Pull config
@@ -14,6 +16,9 @@ codeartifact_account_id = os.environ["CODEARTIFACT_ACCOUNT_ID"]
 codeartifact_domain = os.environ["CODEARTIFACT_DOMAIN"]
 codeartifact_repository = os.environ["CODEARTIFACT_REPOSITORY"]
 auth_incoming = os.getenv("PROXY_AUTH")
+
+codeartifact_repo_url_443 = bytes(f"https://{codeartifact_domain}-{codeartifact_account_id}.d.codeartifact.{codeartifact_region}.amazonaws.com:443/npm/{codeartifact_repository}/", "utf-8")
+codeartifact_repo_url     = bytes(f"https://{codeartifact_domain}-{codeartifact_account_id}.d.codeartifact.{codeartifact_region}.amazonaws.com/npm/{codeartifact_repository}/", "utf-8")
 
 # Logging
 logging.basicConfig()
@@ -48,8 +53,9 @@ def update_auth_token():
 def generate_url(path: str) -> str:
     if path.startswith("/"):
         path = path[1:]
-    return f"https://aws:{AUTH_TOKEN}@{codeartifact_domain}-{codeartifact_account_id}.d.codeartifact.{codeartifact_region}.amazonaws.com/pypi/{codeartifact_repository}/simple/{path}"
-
+    if path.startswith("@") and not ".tgz" in path:
+        path = urllib.parse.quote_plus(path)
+    return f"https://aws:{AUTH_TOKEN}@{codeartifact_domain}-{codeartifact_account_id}.d.codeartifact.{codeartifact_region}.amazonaws.com:443/npm/{codeartifact_repository}/{path}"
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>", methods=["GET", "POST"])
@@ -57,10 +63,20 @@ def proxy(path):
     logger.info(f"{request.method} {request.path}")
 
     if request.method == "GET":
-        response = r.get(f"{generate_url(path)}")
-        return response.content
+        response = req.get(f"{generate_url(path)}")
+
+        if ".tgz" in request.base_url:
+            resp = make_response(response.content)
+            resp.headers['Content-Type'] = response.headers['Content-Type']
+            return resp
+        else:
+            resp1 = response.content.replace(codeartifact_repo_url_443, b"")
+            resp2 = resp1.replace(codeartifact_repo_url, b"")
+            resp = make_response(resp2)
+            resp.headers['Content-Type'] = response.headers['Content-Type']
+            return resp
     elif request.method == "POST":
-        response = r.post(f"{generate_url(path)}", json=request.get_json())
+        response = req.post(f"{generate_url(path)}", json=request.get_json())
         return response.content
 
 

@@ -22,14 +22,28 @@ The container exposes on port 5000, you can then use this container in your pip 
 
 To run using docker-compose, do:
 
-```
-$ git clone git@github.com:Polymathian/aws-codeartifact-python-proxy.git
-$ cd aws-codeartifact-python-proxy
-$ docker-compose up --build
+```shell
+git clone git@github.com:Polymathian/aws-codeartifact-python-proxy.git
+cd aws-codeartifact-python-proxy
+docker-compose up --build
 ```
 
 To install packages using the proxy, use:
 
+```shell
+pip install -i https://<your-host-name-here> <package-name>
 ```
-$ pip install -i https://<your-host-name-here> <package-name>
+
+or for npm packages, just create in needed repository `.npmrc` file:
+
+``` { .npmrc }
+registry=http://<proxyservername_or_localhost>:5000/
+always-auth=true
+_auth=<PROXY_AUTH_encoded_in_base64>
+```
+
+and trigger install packages
+
+```shell
+npm ci
 ```
